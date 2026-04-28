@@ -1,13 +1,9 @@
 import cv2
 import numpy as np
 import time
-import mp4_thread
 import optitrack_thread
 import json
 from pathlib import Path
-
-# A simple example for viewing and recording mp4's from your optitrack cameras
-# Press 'w' to toggle recording, press `q` to quit
 
 calib = Path("./assets/example_calib.json")
 
@@ -26,7 +22,6 @@ for cam_name, cam_properties in calib.items():
 # use_sync=False is crashing for now
 optitrack = optitrack_thread.OptitrackThread(exposure=4000, delay_strobe=False, framerate=120, cam_ids=cam_ids, use_sync=True)
 optitrack.start()
-ffmpeg_recording = False
 fps_history = []
 last_frame_time = None
 
@@ -46,55 +41,35 @@ def make_mosaic(frames):
     grid_rows = [np.hstack(padded[r * cols:(r + 1) * cols]) for r in range(rows)]
     return np.vstack(grid_rows)
 
+print("Starting to retrieve frame groups...")
+keypress = cv2.waitKey(1)
+while not keypress & 0xFF == ord('q'):
+    if optitrack.newFrame:
+        image_frame = optitrack.read()
+        num_cams = image_frame.shape[0]
+        if image_frame.shape[1] > 1:
+            # mosaic = make_mosaic(image_frame)
+            # output_height, output_width = mosaic.shape[:2]
 
-try:
-    print("Starting to retrieve frame groups...")
-    keypress = cv2.waitKey(1)
-    while(not (keypress & 0xFF == ord('q'))):
-        if optitrack.newFrame:
-            image_frame = optitrack.read()
-            num_cams = image_frame.shape[0]
-            if image_frame.shape[1] > 1:
-                # mosaic = make_mosaic(image_frame)
-                # output_height, output_width = mosaic.shape[:2]
+            now = time.perf_counter()
+            if last_frame_time is not None:
+                fps_history.append(1.0 / (now - last_frame_time))
+                if len(fps_history) > 30:
+                    fps_history.pop(0)
+            last_frame_time = now
 
-                # if (keypress & 0xFF == ord('w')):
-                #     if not ffmpeg_recording:
-                #         ffmpeg_process = mp4_thread.ffmpegThread("OptitrackOutput.mp4", width=output_width, height=output_height)
-                #         ffmpeg_process.start()
-                #         ffmpeg_recording = True
-                #     else:
-                #         print("Killing FFMPEG process...")
-                #         ffmpeg_process.end_encoding()
-                #         ffmpeg_recording = False
+            fps = sum(fps_history) / len(fps_history) if fps_history else 0.0
 
-                # if ffmpeg_recording:
-                #     ffmpeg_process.add_image(mosaic)
+            print(fps)
 
-                now = time.perf_counter()
-                if last_frame_time is not None:
-                    fps_history.append(1.0 / (now - last_frame_time))
-                    if len(fps_history) > 30:
-                        fps_history.pop(0)
-                last_frame_time = now
+            # cv2.putText(mosaic, f"FPS: {fps:.1f}", (10, 30),
+            #             cv2.FONT_HERSHEY_SIMPLEX, 1.0, 255, 2, cv2.LINE_AA)
 
-                fps = sum(fps_history) / len(fps_history) if fps_history else 0.0
+            # cv2.namedWindow("Frame", cv2.WINDOW_NORMAL)
+            # cv2.resizeWindow("Frame", 1280, 720)
+            # cv2.imshow("Frame", mosaic)
 
-                print(fps)
-
-                # cv2.putText(mosaic, f"FPS: {fps:.1f}", (10, 30),
-                #             cv2.FONT_HERSHEY_SIMPLEX, 1.0, 255, 2, cv2.LINE_AA)
-
-                # cv2.namedWindow("Frame", cv2.WINDOW_NORMAL)
-                # cv2.resizeWindow("Frame", 1280, 720)
-                # cv2.imshow("Frame", mosaic)
-
-        # keypress = cv2.waitKey(1)
-finally:
-    if ffmpeg_recording:
-        print("Killing FFMPEG process...")
-        ffmpeg_process.end_encoding()
-        ffmpeg_recording = False
+    # keypress = cv2.waitKey(1)
 
     optitrack.stop()
     optitrack.join()
