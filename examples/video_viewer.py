@@ -8,7 +8,8 @@ import optitrack_thread
 # Press 'w' to toggle recording, press `q` to quit
 
 # use_sync=False is crashing for now
-optitrack = optitrack_thread.OptitrackThread(exposure=4000, delay_strobe=False, framerate=20, camera_serials=[107393, 107400, 107401], use_sync=True)
+camera_serials=[107393, 107400, 107401]
+optitrack = optitrack_thread.OptitrackThread(exposure=4000, delay_strobe=False, framerate=120, camera_serials=camera_serials, use_sync=True)
 optitrack.start()
 ffmpeg_recording = False
 fps_history = []
