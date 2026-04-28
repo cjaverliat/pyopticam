@@ -22,7 +22,7 @@ def configure_camera(camera, mode, exposure=3000, framerate=120, delay_strobe=Fa
     camera.SetImagerGain(m.eImagerGain.Gain_Level7)
     camera.SetTextOverlay(True)
     camera.SetStatusRingRGB(64, 0, 255)
-    camera.SetNumeric(True, index + 1)
+    # camera.SetNumeric(True, index + 1)
     if delay_strobe and index > 0:
         camera.SetShutterDelay(int(exposure * 1.2 * index))
         camera.SetStrobeOffset(int(exposure * 1.2 * index))
@@ -66,27 +66,28 @@ class OptitrackThread(threading.Thread):
             camera_list.Refresh()
             entries = [camera_list.get(i) for i in range(camera_list.Count())]
 
-            print([m.CameraManager.X().GetCamera(e.UID()).CameraID() for e in entries])
+            if len(entries) > 0:
+                initialized = set()
+                for e in entries:
+                    serial = e.Serial()
+                    cam = m.CameraManager.X().GetCameraBySerial(serial)
+                    if cam is None:
+                        continue
+                    if requested is not None and cam.CameraID() not in requested:
+                        continue
+                    if e.State() != m.eCameraState.Initialized:
+                        continue
+                    initialized.add(cam.CameraID())
 
-            if requested is not None:
-                initialized = {m.CameraManager.X().GetCamera(
-                    e.UID()).CameraID() for e in entries
-                               if m.CameraManager.X().GetCamera(
-                        e.UID()).CameraID() in requested and e.State() == m.eCameraState.Initialized}
                 if initialized == requested:
                     break
-                missing = requested - initialized
-                print(f"  Still waiting for camera IDs: {sorted(missing)}")
-            else:
-                initialized = {m.CameraManager.X().GetCamera(
-                    e.UID()).CameraID() for e in entries if e.State() == m.eCameraState.Initialized}
-                if initialized:
-                    break
-                print(f"  No cameras initialized yet ({len(entries)} found)")
+                
+                if requested is not None:
+                    missing = requested - initialized
+                    print(f"  Still waiting for camera IDs: {sorted(missing)}")
 
         # Select cameras to use, preserving the order of the provided list.
-        entries_by_id = {m.CameraManager.X().GetCamera(
-            e.UID()).CameraID(): e for e in entries}
+        entries_by_id = {m.CameraManager.X().GetCamera(e.UID()).CameraID(): e for e in entries}
         if requested is not None:
             selected_entries = [entries_by_id[s] for s in cam_ids if s in entries_by_id]
         else:
@@ -124,7 +125,7 @@ class OptitrackThread(threading.Thread):
             time.sleep(0.05)
 
         self.camera_ids = np.array(self.camera_ids, dtype=np.int32).reshape(-1, 1)
-        print(f"Ready with {len(self.camera_array)} camera(s), serials: {self.camera_ids}")
+        print(f"Ready with {len(self.camera_array)} camera(s), ids: {self.camera_ids}")
 
         self.newFrame = False
 

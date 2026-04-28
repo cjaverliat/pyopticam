@@ -55,21 +55,21 @@ try:
             image_frame = optitrack.read()
             num_cams = image_frame.shape[0]
             if image_frame.shape[1] > 1:
-                mosaic = make_mosaic(image_frame)
-                output_height, output_width = mosaic.shape[:2]
+                # mosaic = make_mosaic(image_frame)
+                # output_height, output_width = mosaic.shape[:2]
 
-                if (keypress & 0xFF == ord('w')):
-                    if not ffmpeg_recording:
-                        ffmpeg_process = mp4_thread.ffmpegThread("OptitrackOutput.mp4", width=output_width, height=output_height)
-                        ffmpeg_process.start()
-                        ffmpeg_recording = True
-                    else:
-                        print("Killing FFMPEG process...")
-                        ffmpeg_process.end_encoding()
-                        ffmpeg_recording = False
+                # if (keypress & 0xFF == ord('w')):
+                #     if not ffmpeg_recording:
+                #         ffmpeg_process = mp4_thread.ffmpegThread("OptitrackOutput.mp4", width=output_width, height=output_height)
+                #         ffmpeg_process.start()
+                #         ffmpeg_recording = True
+                #     else:
+                #         print("Killing FFMPEG process...")
+                #         ffmpeg_process.end_encoding()
+                #         ffmpeg_recording = False
 
-                if ffmpeg_recording:
-                    ffmpeg_process.add_image(mosaic)
+                # if ffmpeg_recording:
+                #     ffmpeg_process.add_image(mosaic)
 
                 now = time.perf_counter()
                 if last_frame_time is not None:
@@ -79,14 +79,17 @@ try:
                 last_frame_time = now
 
                 fps = sum(fps_history) / len(fps_history) if fps_history else 0.0
-                cv2.putText(mosaic, f"FPS: {fps:.1f}", (10, 30),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1.0, 255, 2, cv2.LINE_AA)
 
-                cv2.namedWindow("Frame", cv2.WINDOW_NORMAL)
-                cv2.resizeWindow("Frame", 1280, 720)
-                cv2.imshow("Frame", mosaic)
+                print(fps)
 
-        keypress = cv2.waitKey(1)
+                # cv2.putText(mosaic, f"FPS: {fps:.1f}", (10, 30),
+                #             cv2.FONT_HERSHEY_SIMPLEX, 1.0, 255, 2, cv2.LINE_AA)
+
+                # cv2.namedWindow("Frame", cv2.WINDOW_NORMAL)
+                # cv2.resizeWindow("Frame", 1280, 720)
+                # cv2.imshow("Frame", mosaic)
+
+        # keypress = cv2.waitKey(1)
 finally:
     if ffmpeg_recording:
         print("Killing FFMPEG process...")

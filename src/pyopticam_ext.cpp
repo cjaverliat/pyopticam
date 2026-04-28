@@ -661,9 +661,9 @@ NB_MODULE(pyopticam_ext, m) {
         .def("AreCamerasInitialized", &CameraManager::AreCamerasInitialized)
         .def("AreCamerasShutdown", &CameraManager::AreCamerasShutdown)
         .def("Shutdown", &CameraManager::Shutdown)
-        .def("GetCameraBySerial", &CameraManager::GetCameraBySerial, nb::rv_policy::reference)
-        .def("GetCamera", nb::overload_cast<const Core::cUID&>(&CameraManager::GetCamera), nb::rv_policy::reference) // Overloads!
-        .def("GetCamera", nb::overload_cast<>(&CameraManager::GetCamera), nb::rv_policy::reference) // Overloads! , nb::rv_policy::reference
+        .def("GetCameraBySerial", &CameraManager::GetCameraBySerial)
+        .def("GetCamera", nb::overload_cast<const Core::cUID&>(&CameraManager::GetCamera)) // Overloads!
+        .def("GetCamera", nb::overload_cast<>(&CameraManager::GetCamera)) // Overloads! , nb::rv_policy::reference
         //.def("GetCamera", &CameraManager::GetCamera)
         .def("GetCameraList", &CameraManager::GetCameraList)
         .def("GetHardwareKey", &CameraManager::GetHardwareKey)
