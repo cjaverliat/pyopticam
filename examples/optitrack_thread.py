@@ -1,5 +1,4 @@
 import numpy as np
-import cv2
 import threading
 import time
 import pyopticam as m
@@ -34,10 +33,11 @@ def configure_camera(camera, mode, exposure=3000, framerate=120, delay_strobe=Fa
 class OptitrackThread(threading.Thread):
     '''A thread for receiving images from the Optitrack SDK'''
 
-    def __init__(self, mode=m.eVideoMode.MJPEGMode, exposure=50, delay_strobe=False, framerate=-1, camera_serials=None, use_sync=False):
+    def __init__(self, mode=m.eVideoMode.MJPEGMode, exposure=50, delay_strobe=False, framerate=-1, cam_ids=None,
+                 use_sync=False):
         '''Initialize Optitrack Reception.
 
-        camera_serials: list of integer serial numbers to use, e.g. [12345, 67890].
+        cam_ids: list of integer IDs numbers to use, e.g. [1, 2].
                         If None, falls back to a bandwidth-based limit (3 for MJPEG, 4 for Grayscale).
         '''
         threading.Thread.__init__(self)
@@ -53,9 +53,9 @@ class OptitrackThread(threading.Thread):
 
         m.CameraManager.X().WaitForInitialization()
 
-        requested = set(camera_serials) if camera_serials is not None else None
+        requested = set(cam_ids) if cam_ids is not None else None
         if requested:
-            print(f"Waiting for camera(s) with serials: {sorted(requested)}...")
+            print(f"Waiting for camera(s) with IDs: {sorted(requested)}...")
         else:
             print("Waiting for camera(s)...")
 
@@ -66,40 +66,48 @@ class OptitrackThread(threading.Thread):
             camera_list.Refresh()
             entries = [camera_list.get(i) for i in range(camera_list.Count())]
 
+            print([m.CameraManager.X().GetCamera(e.UID()).CameraID() for e in entries])
+
             if requested is not None:
-                initialized = {e.Serial() for e in entries
-                               if e.Serial() in requested and e.State() == m.eCameraState.Initialized}
+                initialized = {m.CameraManager.X().GetCamera(
+                    e.UID()).CameraID() for e in entries
+                               if m.CameraManager.X().GetCamera(
+                        e.UID()).CameraID() in requested and e.State() == m.eCameraState.Initialized}
                 if initialized == requested:
                     break
                 missing = requested - initialized
-                print(f"  Still waiting for serials: {sorted(missing)}")
+                print(f"  Still waiting for camera IDs: {sorted(missing)}")
             else:
-                initialized = {e.Serial() for e in entries if e.State() == m.eCameraState.Initialized}
+                initialized = {m.CameraManager.X().GetCamera(
+                    e.UID()).CameraID() for e in entries if e.State() == m.eCameraState.Initialized}
                 if initialized:
                     break
                 print(f"  No cameras initialized yet ({len(entries)} found)")
 
         # Select cameras to use, preserving the order of the provided list.
-        entries_by_serial = {e.Serial(): e for e in entries}
+        entries_by_id = {m.CameraManager.X().GetCamera(
+            e.UID()).CameraID(): e for e in entries}
         if requested is not None:
-            selected_entries = [entries_by_serial[s] for s in camera_serials if s in entries_by_serial]
+            selected_entries = [entries_by_id[s] for s in cam_ids if s in entries_by_id]
         else:
             # Bandwidth-based fallback: 4 for Grayscale, 3 for MJPEG on a 1 GbE switch
             limit = 4 if self.mode == m.eVideoMode.GrayscaleMode else 3
             selected_entries = sorted(
                 (e for e in entries if e.State() == m.eCameraState.Initialized),
-                key=lambda e: e.Serial()
+                key=lambda e: m.CameraManager.X().GetCamera(e.UID()).CameraID()
             )[:limit]
 
         self.camera_array = []
         self.camera_entries_array = selected_entries
-        self.camera_serials = []
+        self.camera_ids = []
 
         for i, entry in enumerate(selected_entries):
-            print(f"  Camera {i}: serial={entry.Serial()}  name={entry.Name()}  state={entry.State()}")
+            print(
+                f"  Camera {i}: serial={entry.Serial()}  name={entry.Name()}  state={entry.State()}   id={m.CameraManager.X().GetCamera(
+                    entry.UID()).CameraID()}")
             if entry.State() == m.eCameraState.Initialized:
                 self.camera_array.append(m.CameraManager.X().GetCamera(entry.UID()))
-                self.camera_serials.append(entry.Serial())
+                self.camera_ids.append(m.CameraManager.X().GetCamera(entry.UID()).CameraID())
                 time.sleep(0.05)
 
         if self.mode != m.eVideoMode.GrayscaleMode and use_sync:
@@ -115,15 +123,15 @@ class OptitrackThread(threading.Thread):
             configure_camera(cam, self.mode, self.exposure, self.framerate, self.delay_strobe, i)
             time.sleep(0.05)
 
-        self.camera_serials = np.array(self.camera_serials, dtype=np.int32).reshape(-1, 1)
-        print(f"Ready with {len(self.camera_array)} camera(s), serials: {self.camera_serials}")
+        self.camera_ids = np.array(self.camera_ids, dtype=np.int32).reshape(-1, 1)
+        print(f"Ready with {len(self.camera_array)} camera(s), serials: {self.camera_ids}")
 
         self.newFrame = False
 
     def fetch_frame(self):
         if self.mode == m.eVideoMode.GrayscaleMode:
             time.sleep(0.15)  # This sleep appears to be necessary to allow the cameras to retrieve frames
-            new_frame = m.GetSlowFrameArray(self.camera_serials)
+            new_frame = m.GetSlowFrameArray(self.camera_ids)
         elif self.sync is None:
             # No sync object: fetch each camera's latest frame independently with its own camera context
             new_frame = m.GetFrameArrayNoSync(self.camera_array)

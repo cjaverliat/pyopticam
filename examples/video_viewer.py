@@ -3,13 +3,28 @@ import numpy as np
 import time
 import mp4_thread
 import optitrack_thread
+import json
+from pathlib import Path
 
 # A simple example for viewing and recording mp4's from your optitrack cameras
 # Press 'w' to toggle recording, press `q` to quit
 
+calib = Path("./assets/example_calib.json")
+
+if not calib.exists():
+    raise ValueError(f"Calibration file not found at path {calib.absolute().as_posix()}")
+
+with open(calib, 'r', encoding="utf-16") as f:
+    calib = json.load(f)
+
+cam_ids = []
+
+for cam_name, cam_properties in calib.items():
+    cam_id = int(cam_properties["CameraID"])
+    cam_ids.append(cam_id)
+
 # use_sync=False is crashing for now
-camera_serials=[107393, 107400, 107401]
-optitrack = optitrack_thread.OptitrackThread(exposure=4000, delay_strobe=False, framerate=120, camera_serials=camera_serials, use_sync=True)
+optitrack = optitrack_thread.OptitrackThread(exposure=4000, delay_strobe=False, framerate=120, cam_ids=cam_ids, use_sync=True)
 optitrack.start()
 ffmpeg_recording = False
 fps_history = []
