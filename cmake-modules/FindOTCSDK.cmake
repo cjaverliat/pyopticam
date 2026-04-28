@@ -1,20 +1,32 @@
-find_path(OTCSDK_ROOT_DIR
-          NAMES include/camera.h
-          HINTS
-            "C:/Program Files (x86)/OptiTrack/CameraSDK"
-            "$ENV{OTCSDK_ROOT_DIR}"
-          NO_CMAKE_PATH)
+set(OTCSDK_ROOT_DIR "$ENV{OTCSDK_ROOT_DIR}")
+
+if(NOT OTCSDK_ROOT_DIR)
+    set(OTCSDK_ROOT_DIR "$ENV{NP_CAMERASDK}")
+endif()
+
+if(NOT OTCSDK_ROOT_DIR)
+    message(FATAL_ERROR "Neither OTCSDK_ROOT_DIR nor NP_CAMERASDK is set")
+endif()
+
+message(STATUS "OTCSDK_ROOT_DIR = ${OTCSDK_ROOT_DIR}")
 
 find_path(OTCSDK_INCLUDE_DIR
-          NAMES cameralibrary.h
-          HINTS
-            "C:/Program Files (x86)/OptiTrack/CameraSDK/include"
-            "$ENV{OTCSDK_ROOT_DIR}/include"
-            "${OTCSDK_ROOT_DIR}/include"
-          NO_CMAKE_PATH)
+    NAMES cameralibrary.h
+    PATHS "${OTCSDK_ROOT_DIR}/include"
+)
 
-message(STATUS "OTCSDK ROOT DIR ${OTCSDK_ROOT_DIR}")
-message(STATUS "OTCSDK INCLUDE DIR ${OTCSDK_INCLUDE_DIR}")
+find_library(OTCSDK_IMPORT_LIB
+    NAMES CameraLibrary2019x64S
+    PATHS "${OTCSDK_ROOT_DIR}/lib"
+)
+
+find_file(OTCSDK_SHARED_LIB
+    NAMES CameraLibrary2019x64S.dll
+    PATHS "${OTCSDK_ROOT_DIR}/lib"
+)
+
+message(STATUS "OTCSDK_ROOT_DIR ${OTCSDK_ROOT_DIR}")
+message(STATUS "OTCSDK_INCLUDE_DIR ${OTCSDK_INCLUDE_DIR}")
 
 if(WIN32)
   find_library(OTCSDK_IMPORT_LIB CameraLibrary2019x64S HINTS "${OTCSDK_ROOT_DIR}/lib")
@@ -24,8 +36,8 @@ else()
   set(OTCSDK_SHARED_LIB "${OTCSDK_IMPORT_LIB}")
 endif()
 
-message(STATUS "OTCSDK IMPORT LIBRARY DIR ${OTCSDK_IMPORT_LIB}")
-message(STATUS "OTCSDK SHARED LIBRARY DIR ${OTCSDK_SHARED_LIB}")
+message(STATUS "OTCSDK_IMPORT_LIB DIR ${OTCSDK_IMPORT_LIB}")
+message(STATUS "OTCSDK_SHARED_LIB DIR ${OTCSDK_SHARED_LIB}")
 
 include_directories("${OTCSDK_INCLUDE_DIR}")
 
