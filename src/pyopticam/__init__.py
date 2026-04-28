@@ -10,3 +10,4 @@ if sys.platform == "win32":
         pass
 
 from .pyopticam_ext import GetCameraList, eVideoMode, eImagerGain, eCameraState, eStatusLEDs, eOptimization, sStatusLightColor, cCameraLibraryStartupSettings, FrameGroup, Modes, GetFrameGroup, FillTensorFromFrameGroup, GetFrameGroupObjectArray, GetSlowFrameArray, GetFrameArrayNoSync, Frame, Camera, CameraManager, CameraEntry, CameraList, HardwareKeyList, HubList, HardwareDeviceList, CameraManagerListener, cUID, cModuleSync
+from .optitrack_stream import OptitrackStream
