@@ -19,6 +19,17 @@ cam_ids = [int(props["CameraID"]) for props in calib.values()]
 optitrack = optitrack_thread.OptitrackThread(cam_ids=cam_ids)
 optitrack.start()
 
+for camera in optitrack.cameras:
+    camera.SetAEC(False)
+    camera.SetAGC(False)
+    camera.SetFrameRate(120)
+    camera.SetExposure(4000)
+    camera.SetMJPEGQuality(0, True)
+    camera.SetLED(m.eStatusLEDs.IlluminationLED, True)
+    camera.SetIRFilter(False)
+    camera.SetImagerGain(m.eImagerGain.Gain_Level7)
+    camera.SetStatusRingRGB(64, 0, 255)
+
 print("Starting to retrieve frame groups...")
 
 fps_history = []
