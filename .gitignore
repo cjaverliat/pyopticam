@@ -14,7 +14,7 @@ cam
 *.png
 *.mp4
 calib_images*
-*.json
+./*.json
 Rigel*
 Europa*
 local*

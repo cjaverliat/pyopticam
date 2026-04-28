@@ -133,9 +133,9 @@ class OptitrackThread(threading.Thread):
         else:
             current_framegroup = m.GetFrameGroup(self.sync, 100)
             if current_framegroup is None or current_framegroup.Count() == 0:
-                print("[DEBUG] GetFrameGroup timed out (no frame)", flush=True)
+                # print("[DEBUG] GetFrameGroup timed out (no frame)", flush=True)
                 return  # timeout, no frame available; caller checks should_run
-            print(f"[DEBUG] Got frame group with {current_framegroup.Count()} camera(s)", flush=True)
+            # print(f"[DEBUG] Got frame group with {current_framegroup.Count()} camera(s)", flush=True)
             new_frame = np.zeros(
                 (current_framegroup.Count(), self.camera_array[0].Height(), self.camera_array[0].Width()),
                 dtype=np.uint8)
