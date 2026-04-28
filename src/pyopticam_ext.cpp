@@ -4,9 +4,8 @@
 #include <nanobind/stl/list.h>
 #include <cameralibrary.h>
 
-#ifdef _WIN32
-    #include <Windows.h>
-#endif
+#include <thread>
+#include <chrono>
 #include <iostream>
 #include <cstdlib>
 
@@ -17,14 +16,13 @@ namespace nb = nanobind;
 using namespace nb::literals;
 
 NB_MODULE(pyopticam_ext, m) {
-    //m.doc() = "pybind11 example plugin"; // optional module docstring
-    
+    m.doc() = "Python bindings for the OptiTrack Camera SDK (CameraLibrary).";
+
     m.def("GetCameraList", [](CameraManager& manager) {
         CameraList cameras;
-        //CameraManager::X()
-        //manager.GetCameraList(cameras);
+        manager.GetCameraList(cameras);
         return cameras;
-    });//, nb::rv_policy::reference);
+    }, "manager"_a, "Return a CameraList populated from the given CameraManager.");
 
     m.def("GetFrameGroupObjectArray", [](cModuleSync* sync) {
         nanobind::gil_scoped_release release;
@@ -44,7 +42,7 @@ NB_MODULE(pyopticam_ext, m) {
         bool invalid_frame_group = frameGroup == nullptr || frameGroup->Count() == 0;
         while(invalid_frame_group){
             //printf("[INFO] Bad Framegroup; Sleeping...\n");
-            Sleep(1);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
             frameGroup = sync -> GetFrameGroup();
             invalid_frame_group = frameGroup == nullptr || frameGroup->Count() == 0;
  
@@ -118,7 +116,8 @@ NB_MODULE(pyopticam_ext, m) {
                 } catch (...) { 
                     // This never gets triggered; it just silently crashes...
                     printf("[WARNING] Image Read Failed, trying again...\n");
-                    Sleep(1);
+
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 }
             }
             if(!(frame->IsInvalid())){
@@ -135,7 +134,7 @@ NB_MODULE(pyopticam_ext, m) {
                         full_buffer = (uint8_t*) malloc(size * (count+1));
                         if(full_buffer == nullptr){
                             printf("[ERROR] Failed to allocate memory for full buffer!  Trying again...\n");
-                            Sleep(2);
+                            std::this_thread::sleep_for(std::chrono::milliseconds(2));
                         }
                     }
                     size_t shape[3] = { count, height, width };
@@ -166,32 +165,78 @@ NB_MODULE(pyopticam_ext, m) {
     });
 
     
-    m.def("GetFrameGroup", [](cModuleSync* sync) {
+    m.def("GetFrameArrayNoSync", [](nb::list cameras) {
         nanobind::gil_scoped_release release;
-        //FrameGroup* frameGroup = sync -> GetFrameGroup(); //GetFrameGroupSharedPointer();//
-        std::shared_ptr<const FrameGroup> frameGroup = sync->GetFrameGroup();
-        bool invalid_frame_group = !frameGroup || frameGroup == nullptr || frameGroup->Count() == 0;
-        while(invalid_frame_group){
-            //printf("[INFO] Bad Framegroup; Sleeping...\n");
-            //Sleep(8);
-            //frameGroup = sync -> GetFrameGroup();
-            frameGroup = sync->GetFrameGroup();
-            invalid_frame_group = !frameGroup || frameGroup == nullptr || frameGroup->Count() == 0;
 
-            //if(invalid_frame_group){
-            //    if(frameGroup == nullptr){
-            //        printf("[INFO] FrameGroup is Null!\n");
-            //    } else {
-            //        printf("[INFO] FrameGroup has %i frames\n", frameGroup->Count());
-            //    }
-            //}
+        int count = (int)cameras.size();
+        uint8_t* full_buffer = nullptr;
+        int height = 0, width = 0;
+        size_t offset = 0;
+
+        // Dummy default return
+        uint8_t *stand_in_data = new uint8_t[8] { 0 };
+        size_t stand_in_shape[3] = { (size_t)count, 1, 1 };
+        nb::capsule stand_in_deleter(stand_in_data, [](void *p) noexcept { delete[] (uint8_t *) p; });
+        nb::ndarray<nb::numpy, uint8_t> ndarray = nb::ndarray<nb::numpy, uint8_t>(stand_in_data, 3, stand_in_shape, stand_in_deleter);
+
+        nanobind::gil_scoped_acquire acquire_tmp;
+        std::vector<Camera*> cam_ptrs;
+        for (int i = 0; i < count; i++) {
+            cam_ptrs.push_back(nb::cast<Camera*>(cameras[i]));
+        }
+        nanobind::gil_scoped_release release2;
+
+        for (int i = 0; i < count; i++) {
+            Camera* cam = cam_ptrs[i];
+            std::shared_ptr<const Frame> frame = cam->LatestFrame();
+            if (frame == nullptr || frame->IsInvalid()) {
+                printf("[WARNING] Camera %i: null or invalid frame, skipping\n", i);
+                continue;
+            }
+            int size = frame->GrayscaleDataSize();
+            if (offset == 0) {
+                stand_in_deleter.release();
+                height = frame->Height(); width = frame->Width();
+                full_buffer = (uint8_t*)malloc(size * count);
+                if (full_buffer == nullptr) {
+                    printf("[ERROR] Failed to allocate frame buffer\n");
+                    break;
+                }
+                memset(full_buffer, 0, size * count);
+                size_t shape[3] = { (size_t)count, (size_t)height, (size_t)width };
+                nb::capsule deleter(full_buffer, [](void *p) noexcept { free((uint8_t*)p); });
+                ndarray = nb::ndarray<nb::numpy, uint8_t>(full_buffer, 3, shape, deleter);
+            }
+            if (size <= width * height) {
+                const uint8_t* data = frame->GrayscaleData(*cam);
+                memcpy(full_buffer + (i * size), data, size);
+                offset += size;
+            } else {
+                printf("[WARNING] Camera %i: frame size mismatch\n", i);
+            }
+        }
+
+        nanobind::gil_scoped_acquire acquire;
+        return ndarray;
+    });
+
+    m.def("GetFrameGroup", [](cModuleSync* sync, int timeout_ms) -> std::shared_ptr<const FrameGroup> {
+        nanobind::gil_scoped_release release;
+        std::shared_ptr<const FrameGroup> frameGroup = sync->GetFrameGroup();
+        bool invalid_frame_group = !frameGroup || frameGroup->Count() == 0;
+        int elapsed = 0;
+        while(invalid_frame_group && elapsed < timeout_ms){
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            elapsed++;
+            frameGroup = sync->GetFrameGroup();
+            invalid_frame_group = !frameGroup || frameGroup->Count() == 0;
         }
         nanobind::gil_scoped_acquire acquire;
         return frameGroup;
-    });
+    }, "sync"_a, "timeout_ms"_a = 100);
 
     
-    m.def("FillTensorFromFrameGroup", [](std::shared_ptr<Camera> camera, std::shared_ptr<FrameGroup> frameGroup, nb::ndarray<nb::numpy> ndarray) { //,uint8_t, nb::shape<8, 1024, 1280>, nb::c_contig, nb::device::cpu
+    m.def("FillTensorFromFrameGroup", [](std::shared_ptr<Camera> camera, std::shared_ptr<const FrameGroup> frameGroup, nb::ndarray<nb::numpy> ndarray) { //,uint8_t, nb::shape<8, 1024, 1280>, nb::c_contig, nb::device::cpu
         nanobind::gil_scoped_release release;
         //uint8_t *stand_in_data = new uint8_t[8] { 1, 2, 3, 4, 5, 6, 7, 8 };
         //size_t stand_in_shape[3] = { 8, 1, 1 };
@@ -219,7 +264,7 @@ NB_MODULE(pyopticam_ext, m) {
                             full_buffer = (uint8_t*)ndarray.data();//(uint8_t*) malloc(size * (count+1));
                             if(full_buffer == nullptr){
                                 printf("[ERROR] Failed to allocate memory for full buffer!  Trying again...\n");
-                                Sleep(2);
+                                std::this_thread::sleep_for(std::chrono::milliseconds(2));
                             }
                         }
                     }
@@ -247,21 +292,19 @@ NB_MODULE(pyopticam_ext, m) {
         nanobind::gil_scoped_acquire acquire;
     });
 
-    nb::enum_<Core::eVideoMode>(m, "eVideoMode")
-        .value("SegmentMode"  , Core::eVideoMode::SegmentMode)
-        .value("GrayscaleMode", Core::eVideoMode::GrayscaleMode)
-        .value("ObjectMode", Core::eVideoMode::ObjectMode)
+    nb::enum_<Core::eVideoMode>(m, "eVideoMode", "Camera video output mode.")
+        .value("SegmentMode"  , Core::eVideoMode::SegmentMode, "Segment/blob detection mode.")
+        .value("GrayscaleMode", Core::eVideoMode::GrayscaleMode, "Full grayscale image mode.")
+        .value("ObjectMode", Core::eVideoMode::ObjectMode, "Tracked object mode.")
         .value("InterleavedGrayscaleMode", Core::eVideoMode::InterleavedGrayscaleMode)
         .value("PrecisionMode", Core::eVideoMode::PrecisionMode)
         .value("BitPackedPrecisionMode", Core::eVideoMode::BitPackedPrecisionMode)
-        .value("MJPEGMode", Core::eVideoMode::MJPEGMode)
+        .value("MJPEGMode", Core::eVideoMode::MJPEGMode, "MJPEG compressed video mode.")
         .value("VideoMode", Core::eVideoMode::VideoMode)
         .value("SynchronizationTelemetry", Core::eVideoMode::SynchronizationTelemetry)
-        //.value("VideoModeCount", Core::eVideoMode::Video)
         .value("UnknownMode", Core::eVideoMode::UnknownMode);
-        //.export_values();
 
-    nb::enum_<CameraLibrary::eImagerGain>(m, "eImagerGain")
+    nb::enum_<CameraLibrary::eImagerGain>(m, "eImagerGain", "Imager gain level.")
         .value("Gain_Level0", CameraLibrary::eImagerGain::Gain_Level0)
         .value("Gain_Level1", CameraLibrary::eImagerGain::Gain_Level1)
         .value("Gain_Level2", CameraLibrary::eImagerGain::Gain_Level2)
@@ -269,18 +312,24 @@ NB_MODULE(pyopticam_ext, m) {
         .value("Gain_Level4", CameraLibrary::eImagerGain::Gain_Level4)
         .value("Gain_Level5", CameraLibrary::eImagerGain::Gain_Level5)
         .value("Gain_Level6", CameraLibrary::eImagerGain::Gain_Level6)
-        .value("Gain_Level7", CameraLibrary::eImagerGain::Gain_Level7);
+        .value("Gain_Level7", CameraLibrary::eImagerGain::Gain_Level7, "Maximum gain.");
 
-    nb::enum_<CameraLibrary::eCameraState>(m, "eCameraState")
+    nb::enum_<CameraLibrary::eCameraState>(m, "eCameraState", "Camera initialization state.")
         .value("Uninitialized"  , CameraLibrary::eCameraState::Uninitialized)
         .value("InitializingDevice", CameraLibrary::eCameraState::InitializingDevice)
         .value("InitializingCamera", CameraLibrary::eCameraState::InitializingCamera)
         .value("Initializing", CameraLibrary::eCameraState::Initializing)
         .value("WaitingForChildDevices", CameraLibrary::eCameraState::WaitingForChildDevices)
         .value("WaitingForDeviceInitialization", CameraLibrary::eCameraState::WaitingForDeviceInitialization)
-        .value("Initialized", CameraLibrary::eCameraState::Initialized)
+        .value("Initialized", CameraLibrary::eCameraState::Initialized, "Camera is fully initialized and ready.")
         .value("Disconnected", CameraLibrary::eCameraState::Disconnected)
         .value("Shutdown", CameraLibrary::eCameraState::Shutdown);
+
+    nb::enum_<CameraLibrary::eStatusLEDs>(m, "eStatusLEDs", "Camera status LED selector.")
+        .value("GreenStatusLED",  CameraLibrary::eStatusLEDs::GreenStatusLED)
+        .value("RedStatusLED",    CameraLibrary::eStatusLEDs::RedStatusLED)
+        .value("CaseStatusLED",   CameraLibrary::eStatusLEDs::CaseStatusLED)
+        .value("IlluminationLED", CameraLibrary::eStatusLEDs::IlluminationLED, "IR illumination ring LED.");
 
     nb::enum_<CameraLibrary::cModuleSync::eOptimization>(m, "eOptimization")
         .value("ForceTimelyDelivery"  , CameraLibrary::cModuleSync::eOptimization::ForceTimelyDelivery)
@@ -294,7 +343,7 @@ NB_MODULE(pyopticam_ext, m) {
         .def_rw("Green", &sStatusLightColor::Green)
         .def_rw("Blue", &sStatusLightColor::Blue);
 
-    nb::class_<CameraLibrary::cModuleSync>(m, "cModuleSync")
+    nb::class_<CameraLibrary::cModuleSync>(m, "cModuleSync", "Frame synchronizer that groups frames from multiple cameras.")
         .def_static("Create", CameraLibrary::cModuleSync::Create, nb::rv_policy::reference)
         .def_static("Destroy", CameraLibrary::cModuleSync::Destroy)
         .def("PostFrame", &CameraLibrary::cModuleSync::PostFrame)
@@ -406,7 +455,7 @@ NB_MODULE(pyopticam_ext, m) {
         //.def("HardwareRecording", &Frame::HardwareRecording)
         ;
 
-    nb::class_<Camera>(m, "Camera")
+    nb::class_<Camera>(m, "Camera", "Represents a connected OptiTrack camera.")
         //.def(nb::init())
         .def("Width", &Camera::Width)
         .def("Height", &Camera::Height)
@@ -563,7 +612,7 @@ NB_MODULE(pyopticam_ext, m) {
         .def("RinglightTemp", &Camera::RinglightTemp) // Virtual
         //.def("IsCameraFanSpeedValid", &Camera::IsCameraFanSpeedValid) // Virtual
         //.def("CameraFanSpeed", &Camera::CameraFanSpeed) // Virtual
-        .def("IsPoEPlusActive", &Camera::IsPoEPlusActive) // Virtual
+//        .def("IsPoEPlusActive", &Camera::IsPoEPlusActive) // Virtual
         .def("SetLLDPDetection", &Camera::SetLLDPDetection) // Uses Enum
         .def("IsLLDPDetectionAvailable", &Camera::IsLLDPDetectionAvailable) // Virtual  // Uses Enum
         .def("LLDPDetection", &Camera::LLDPDetection) // Uses Enum
@@ -605,7 +654,7 @@ NB_MODULE(pyopticam_ext, m) {
         //.def("SetPixelIntensityMapping", &Camera::SetPixelIntensityMapping) // Virtual
         ;
 
-    nb::class_<CameraManager>(m, "CameraManager")
+    nb::class_<CameraManager>(m, "CameraManager", "Singleton managing all connected OptiTrack cameras. Access via CameraManager.X().")
         //.def(nb::init())
         .def_static("X", CameraManager::X, nb::rv_policy::reference)
         .def("WaitForInitialization", &CameraManager::WaitForInitialization)
@@ -659,11 +708,11 @@ NB_MODULE(pyopticam_ext, m) {
         .def("SerialString", &CameraEntry::SerialString)
         ;
 
-    nb::class_<CameraList>(m, "CameraList")
+    nb::class_<CameraList>(m, "CameraList", "A snapshot list of connected cameras. Automatically populated on construction.")
         .def(nb::init())
-        .def("get", &CameraList::operator[])
-        .def("Count", &CameraList::Count)
-        .def("Refresh", &CameraList::Refresh)
+        .def("get", &CameraList::operator[], "index"_a, "Return the CameraEntry at the given index.")
+        .def("Count", &CameraList::Count, "Number of cameras in the list.")
+        .def("Refresh", &CameraList::Refresh, "Repopulate the list from the current CameraManager state.")
         ;
 
     nb::class_<HardwareKeyList>(m, "HardwareKeyList")
