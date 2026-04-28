@@ -21,3 +21,4 @@ local*
 *.dll
 .venv
 .vs
+CMakeFiles
