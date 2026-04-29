@@ -1,3 +1,4 @@
+import gc
 import time
 
 import numpy as np
@@ -62,7 +63,10 @@ class OptitrackStream:
             self._sync.RemoveAllCameras()
             m.cModuleSync.Destroy(self._sync)
             self._sync = None
-        m.CameraManager.X().Shutdown()
+        self._cameras.clear()
+        gc.collect()
+        if m.CameraManager.IsActive():
+            m.CameraManager.X().Shutdown()
 
     def __enter__(self) -> "OptitrackStream":
         return self
