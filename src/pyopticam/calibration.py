@@ -71,26 +71,27 @@ def read_mcal(path: str | Path) -> dict[int, CameraCalibration]:
 
         extr = cam_el.find("Extrinsic")
         if extr is not None:
-            t = np.array([
+            t_world = np.array([
                 float(extr.get("X", 0)),
                 float(extr.get("Y", 0)),
                 float(extr.get("Z", 0)),
             ])
-            R = np.array(
+            # OrientMatrix is camera-to-world rotation (camera pose), row-major
+            R_c2w = np.array(
                 [float(extr.get(f"OrientMatrix{i}", 0)) for i in range(9)]
             ).reshape(3, 3)
         else:
-            t = np.zeros(3)
-            R = np.eye(3)
+            t_world = np.zeros(3)
+            R_c2w = np.eye(3)
 
-        # Convert from OptiTrack (-z forward) to OpenCV (+z forward) in camera frame
+        R_w2c = R_c2w.T
+        t_w2c = -R_w2c @ t_world
+
+        # Convert camera frame: Motive (-Z forward, Y-up) → OpenCV (+Z forward, Y-down)
         flip = np.diag([1.0, -1.0, -1.0])
-        R = flip @ R
-        t = flip @ t
-
         extrinsic = np.eye(4)
-        extrinsic[:3, :3] = R
-        extrinsic[:3, 3] = t
+        extrinsic[:3, :3] = flip @ R_w2c
+        extrinsic[:3, 3] = flip @ t_w2c
 
         result[serial] = CameraCalibration(
             serial=serial,

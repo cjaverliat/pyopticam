@@ -1,6 +1,6 @@
 [project]
 name = "pyopticam"
-version = "0.1.2"
+version = "0.1.3"
 description = "A nanobind wrapper for NaturalPoint's Optitrack Camera SDK"
 authors = [{ name = "Johnathon Selstad", email = "john.selstad@ultraleap.com" }]
 maintainers = [{ name = "Charles Javerliat", email = "charles.javerliat@gmail.com" }]
@@ -17,6 +17,10 @@ cmake.build-type = "Release"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pyopticam"]
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
 
 [tool.pixi.target.win-64.activation]
 scripts = ["activate.bat"]
@@ -37,8 +41,13 @@ pip = "*"
 [tool.pixi.pypi-dependencies]
 nanobind = "*"
 scikit-build-core = "*"
-opencv-python = "*"
 pyopticam = { path = ".", editable = true }
+
+[tool.pixi.feature.dev.pypi-dependencies]
+rerun-sdk = "*"
+opencv-python = "*"
+scipy = "*"
+scipy-stubs = "*"
 
 [tool.pixi.tasks]
 clean = "rm -rf build dist *.egg-info"
