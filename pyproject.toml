@@ -1,8 +1,9 @@
 [project]
 name = "pyopticam"
-version = "0.0.2"
+version = "0.1.0"
 description = "A nanobind wrapper for NaturalPoint's Optitrack Camera SDK"
 authors = [{ name = "Johnathon Selstad", email = "john.selstad@ultraleap.com" }]
+maintainers = [{ name = "Charles Javerliat", email = "charles.javerliat@gmail.com" }]
 license = { text = "BSD" }
 requires-python = ">=3.8"
 
