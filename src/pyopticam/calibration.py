@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-
+from pathlib import Path
 import numpy as np
 
 
@@ -17,7 +17,7 @@ class CameraCalibration:
     extrinsic: np.ndarray      # shape (4, 4), OpenCV convention (+z forward)
 
 
-def read_mcal(path: str) -> dict[str, CameraCalibration]:
+def read_mcal(path: str | Path) -> dict[str, CameraCalibration]:
     """Parse an OptiTrack Motive .mcal file and return per-camera calibration.
 
     Args:
@@ -26,6 +26,11 @@ def read_mcal(path: str) -> dict[str, CameraCalibration]:
     Returns:
         Dict mapping camera serial string to CameraCalibration.
     """
+    path = Path(path)
+
+    if not path.exists():
+        raise FileNotFoundError(f"File {path} not found.")
+
     tree = ET.parse(path)
     root = tree.getroot()
 
