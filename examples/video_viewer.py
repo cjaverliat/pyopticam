@@ -1,23 +1,17 @@
-import json
 import time
 from pathlib import Path
 
 import cv2
 import numpy as np
+
 import pyopticam as m
+from pyopticam import read_mcal, optitrack_thread
 
-import optitrack_thread
+calib_path = Path("./assets/example_calib.mcal")
+calib = read_mcal(calib_path)
+cam_serials = list(calib.keys())
 
-calib_path = Path("./assets/example_calib.json")
-if not calib_path.exists():
-    raise FileNotFoundError(f"Calibration file not found: {calib_path.absolute()}")
-
-with open(calib_path, encoding="utf-16") as f:
-    calib = json.load(f)
-
-cam_ids = [int(props["CameraID"]) for props in calib.values()]
-
-optitrack = optitrack_thread.OptitrackThread(cam_ids=cam_ids)
+optitrack = optitrack_thread.OptitrackThread(cam_serials=cam_serials)
 optitrack.start()
 
 for camera in optitrack.cameras:

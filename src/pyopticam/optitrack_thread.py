@@ -12,10 +12,10 @@ class OptitrackThread(threading.Thread):
     blocking the caller.
     """
 
-    def __init__(self, cam_ids: list[int], timeout_ms: int = 100) -> None:
+    def __init__(self, cam_serials: list[int], timeout_ms: int = 100) -> None:
         super().__init__(daemon=True)
-        self._stream = OptitrackStream(cam_ids, timeout_ms)
-        self._frame: np.ndarray | None = None
+        self._stream = OptitrackStream(cam_serials, timeout_ms)
+        self._frames: np.ndarray | None = None
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
 
@@ -26,7 +26,7 @@ class OptitrackThread(threading.Thread):
     def read(self) -> np.ndarray | None:
         """Return the most recent frame (non-blocking), or None if none yet."""
         with self._lock:
-            return self._frame
+            return self._frames
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -36,5 +36,5 @@ class OptitrackThread(threading.Thread):
             ok, frame = self._stream.read()
             if ok:
                 with self._lock:
-                    self._frame = frame
+                    self._frames = frame
         self._stream.release()
