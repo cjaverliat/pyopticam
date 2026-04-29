@@ -8,7 +8,7 @@ import numpy as np
 
 @dataclass
 class CameraCalibration:
-    serial: str
+    serial: int
     camera_id: int
     width: int
     height: int
@@ -17,14 +17,14 @@ class CameraCalibration:
     extrinsic: np.ndarray      # shape (4, 4), OpenCV convention (+z forward)
 
 
-def read_mcal(path: str | Path) -> dict[str, CameraCalibration]:
+def read_mcal(path: str | Path) -> dict[int, CameraCalibration]:
     """Parse an OptiTrack Motive .mcal file and return per-camera calibration.
 
     Args:
         path: Path to the .mcal file (UTF-16LE encoded XML).
 
     Returns:
-        Dict mapping camera serial string to CameraCalibration.
+        Dict mapping camera serial to CameraCalibration.
     """
     path = Path(path)
 
@@ -38,10 +38,10 @@ def read_mcal(path: str | Path) -> dict[str, CameraCalibration]:
     if cameras_el is None:
         raise ValueError(f"No Calibration/Cameras element found in {path}")
 
-    result: dict[str, CameraCalibration] = {}
+    result: dict[int, CameraCalibration] = {}
 
     for cam_el in cameras_el.findall("Camera"):
-        serial = cam_el.get("Serial", "")
+        serial = int(cam_el.get("Serial", "0").lstrip("ABCDEFGHIJKLMNOPQRSTUVWXYZ"))
 
         props = cam_el.find("Properties")
         camera_id = int(props.get("CameraID", 0)) if props is not None else 0
