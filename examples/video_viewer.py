@@ -10,6 +10,8 @@ from pyopticam import read_mcal, optitrack_thread
 calib_path = Path("./assets/example_calib.mcal")
 calib = read_mcal(calib_path)
 cam_serials = list(calib.keys())
+# Only show a max of N cameras
+cam_serials = cam_serials[:3]
 
 optitrack = optitrack_thread.OptitrackThread(cam_serials=cam_serials)
 optitrack.start()
@@ -18,7 +20,7 @@ for camera in optitrack.cameras:
     camera.SetAEC(False)
     camera.SetAGC(False)
     camera.SetFrameRate(120)
-    camera.SetExposure(6000)
+    camera.SetExposure(12000)
     camera.SetMJPEGQuality(0, True)
     camera.SetLED(m.eStatusLEDs.IlluminationLED, True)
     camera.SetIRFilter(True)

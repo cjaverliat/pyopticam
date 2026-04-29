@@ -893,8 +893,8 @@ packages:
   requires_python: '>=3.10'
 - pypi: ./
   name: pyopticam
-  version: 0.1.3
-  sha256: 30df8139b2a9346809c4341265f51e364a03940b5d91497c6ea011f15287ec5b
+  version: 0.2.0
+  sha256: d96424131d1f1579cad8d0ac30805aa6bb642d4f8a0ecf3147da5a586bec39c3
   requires_python: '>=3.8'
   editable: true
 - conda: https://conda.anaconda.org/conda-forge/linux-64/python-3.14.4-habeac84_100_cp314.conda
