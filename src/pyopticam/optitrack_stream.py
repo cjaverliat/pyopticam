@@ -13,15 +13,15 @@ class OptitrackStream:
     loop, call release() (or use as a context manager) when done.
     """
 
-    def __init__(self, cam_ids: list[int], timeout_ms: int = 100) -> None:
-        """Wait for all cameras in cam_ids to initialize, then start MJPEG capture.
+    def __init__(self, cam_serials: list[int], timeout_ms: int = 100) -> None:
+        """Wait for all cameras in cam_serials to initialize, then start MJPEG capture.
 
         Args:
-            cam_ids:     Ordered list of camera IDs to open.
+            cam_serials: Ordered list of camera serials to open.
             timeout_ms:  Per-call timeout passed to GetFrameGroup.
         """
         m.CameraManager.X().WaitForInitialization()
-        self._cameras: list[m.Camera] = self._wait_for_cameras(cam_ids)
+        self._cameras: list[m.Camera] = self._wait_for_cameras(cam_serials)
         self._timeout_ms = timeout_ms
 
         for cam in self._cameras:
@@ -74,9 +74,9 @@ class OptitrackStream:
     def __exit__(self, *_) -> None:
         self.release()
 
-    def _wait_for_cameras(self, cam_ids: list[int]) -> list[m.Camera]:
-        requested = set(cam_ids)
-        print(f"Waiting for cameras {sorted(requested)}...")
+    def _wait_for_cameras(self, cam_serials: list[int]) -> list[m.Camera]:
+        requested = set(cam_serials)
+        print(f"Waiting for cameras with serials {sorted(requested)}...")
         while True:
             camera_list = m.CameraList()
             camera_list.Refresh()
@@ -84,14 +84,17 @@ class OptitrackStream:
 
             ready: dict[int, m.Camera] = {}
             for entry in entries:
-                cam = m.CameraManager.X().GetCameraBySerial(entry.Serial())
-                if cam is None or cam.CameraID() not in requested:
+                serial = entry.Serial()
+                if serial not in requested:
+                    continue
+                cam = m.CameraManager.X().GetCameraBySerial(serial)
+                if cam is None:
                     continue
                 if entry.State() == m.eCameraState.Initialized:
-                    ready[cam.CameraID()] = cam
+                    ready[serial] = cam
 
             if set(ready) == requested:
-                return [ready[cid] for cid in cam_ids]
+                return [ready[serial] for serial in cam_serials]
 
-            print(f"  Still waiting for camera IDs: {sorted(requested - set(ready))}")
+            print(f"  Still waiting for camera serials: {sorted(requested - set(ready))}")
             time.sleep(0.5)
